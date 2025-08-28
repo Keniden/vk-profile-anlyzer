@@ -6,6 +6,7 @@ import (
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type DataBase struct {
@@ -22,7 +23,7 @@ func (d DataBase) GetPool(_ context.Context) *pgxpool.Pool {
 	return d.cluster
 }
 
-func(d DataBase) Get(ctx, dest interface{}, query string, args ...interface{}) error{
+func(d DataBase) Get(ctx context.Context, dest interface{}, query string, args ...interface{}) error{
     return pgxscan.Get(ctx, d.cluster, dest, query, args)
 }
 

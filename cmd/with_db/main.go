@@ -3,24 +3,29 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"example/internal/pkg/db"
+	"example/internal/pkg/repository"
+	"example/internal/pkg/repository/postgresql"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"strconv"
+
 	"github.com/gorilla/mux"
-	"example/internal/pkg/db"
 )
 
 const port = ":8080"
 const queryParamKey = "key"
 
 type server1 struct {
-	data map[string]string
+	repo *postgresql.ArticleRepo
 }
 
-type requestCustom struct {
-	Key   string
-	Value string
+type addArticleRequest struct {
+	Name   string `json:"name"`
+	Rating int64  `json:"rating"`
 }
 
 func main() {
@@ -33,9 +38,11 @@ func main() {
 	}
 
 	defer database.GetPool(ctx).Close()
-	
+
+	articleRepo := postgresql.NewArticles(database)
+
 	implementation := server1{
-		data: make(map[string]string)}
+		repo: articleRepo}
 
 	http.Handle("/", createRouter(implementation))
 
@@ -58,7 +65,7 @@ func createRouter(implementation server1) *mux.Router {
 		}
 	})
 
-	router.HandleFunc(fmt.Sprintf("/article/{%s:[A-z]+}", queryParamKey), func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(fmt.Sprintf("/article/{%s:[0-9]+}", queryParamKey), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			implementation.Get(w, r)
@@ -76,18 +83,18 @@ func (s *server1) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server1) Delete(w http.ResponseWriter, r *http.Request) {
-	key, ok := mux.Vars(r)[queryParamKey]
-	if !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	_, ok = s.data[key]
-	if !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+	// key, ok := mux.Vars(r)[queryParamKey]
+	// if !ok {
+	// 	w.WriteHeader(http.StatusBadRequest)
+	// 	return
+	// }
+	// _, ok = s.data[key]
+	// if !ok {
+	// 	w.WriteHeader(http.StatusBadRequest)
+	// 	return
+	// }
 
-	delete(s.data, key)
+	// delete(s.data, key)
 }
 
 func (s *server1) Get(w http.ResponseWriter, r *http.Request) {
@@ -96,17 +103,41 @@ func (s *server1) Get(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	value, ok := s.data[key]
-	if !ok {
+	// value, ok := s.data[key]
+	// if !ok {
+	// 	w.WriteHeader(http.StatusBadRequest)
+	// 	return
+	// }
+
+	// if _, err := w.Write([]byte(value)); err != nil {
+	// 	w.WriteHeader(http.StatusInternalServerError)
+	// 	return
+	// }
+	keyInt, err := strconv.ParseInt(key, 10, 64)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	if _, err := w.Write([]byte(value)); err != nil {
+	article, err := s.repo.GetByID(r.Context(), keyInt)
+	if err != nil {
+		if errors.As(err, &repository.ErrObjNotFound) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	articleJson, err := json.Marshal(article)
+	if err != nil {
+		fmt.Println(articleJson)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(articleJson)
 }
+
 func (s *server1) Create(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -114,21 +145,34 @@ func (s *server1) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var unm requestCustom
-	if err := json.Unmarshal(body, &unm); err != nil{
+	var unm addArticleRequest
+	if err := json.Unmarshal(body, &unm); err != nil {
 		fmt.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if unm.Key == "" || unm.Value == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+	articleRepo := &repository.Article{
+		Name: unm.Name, Rating: unm.Rating,
 	}
+	id, err := s.repo.Add(r.Context(), articleRepo)
 
-	if _, ok := s.data[unm.Key]; ok{
-		w.WriteHeader(http.StatusConflict)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	s.data[unm.Key] = unm.Value
+	articleRepo.ID = int64(id)
+	articleJson, _ := json.Marshal(articleRepo)
+	w.Write(articleJson)
+
+	// if unm.Name == "" {
+	// 	w.WriteHeader(http.StatusBadRequest)
+	// 	return
+	// }
+
+	// if _, ok := s.data[unm.Key]; ok {
+	// 	w.WriteHeader(http.StatusConflict)
+	// 	return
+	// }
+	// s.data[unm.Key] = unm.Value
 }
