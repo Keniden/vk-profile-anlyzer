@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - INTEAM_DB_DRIVER=postgres
+      - INTEAM_DB_DSN=host=db user=postgres password=postgres dbname=inteam sslmode=disable
+      - INTEAM_REDIS_ADDR=redis:6379
+      - INTEAM_MINIO_ENDPOINT=minio:9000
+      - INTEAM_MINIO_ACCESS_KEY_ID=minioadmin
+      - INTEAM_MINIO_SECRET_ACCESS_KEY=minioadmin
+      - INTEAM_MINIO_BUCKET=inteam-profiles
+      - INTEAM_HTTP_HOST=0.0.0.0
+      - INTEAM_HTTP_PORT=8080
+      - INTEAM_LOGGING_LEVEL=info
+    depends_on:
+      - db
+      - redis
+      - minio
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: inteam
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+

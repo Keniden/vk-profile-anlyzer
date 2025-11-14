@@ -1,15 +1,24 @@
-GOOSE_DRIVER=postgres
-GOOSE_DBSTRING=postgres://postgres:postgres@localhost:5432/cruddb?sslmode=disable
-MIGRATIONS_DIR=./internal/pkg/db/migrations
+all: build
 
-migrate-up:
-	goose -dir $(MIGRATIONS_DIR) $(GOOSE_DRIVER) "$(GOOSE_DBSTRING)" up
+run:
+	go run ./cmd/server
 
-migrate-down:
-	goose -dir $(MIGRATIONS_DIR) $(GOOSE_DRIVER) "$(GOOSE_DBSTRING)" down
+grpc:
+	go run ./cmd/grpcserver
 
-migrate-status:
-	goose -dir $(MIGRATIONS_DIR) $(GOOSE_DRIVER) "$(GOOSE_DBSTRING)" status
+test:
+	go test ./...
 
-migrate-create:
-	goose -dir $(MIGRATIONS_DIR) create ${name} sql
+lint:
+	golangci-lint run ./...
+
+build:
+	go build ./cmd/server
+
+docker-build:
+	docker build -t inteam-api .
+
+docker-up:
+	docker-compose up --build
+
+.PHONY: all run grpc test lint build docker-build docker-up
