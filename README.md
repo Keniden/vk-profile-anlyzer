@@ -1,54 +1,118 @@
-# **INTEAM**
+# INTEAM — анализатор профиля VK (Go)
 
-### *Веб-платформа для анализа соц.сетей*
+Сервис для анализа профиля пользователя ВКонтакте. Бэкенд на Go подтягивает данные из VK API (стена, друзья, подарки), строит вектор активности, отправляет их в GigaChat для генерации текстового резюме и сохраняет результат в базе и объектном хранилище.
 
-*Открываем вашему взору самое сокровенное: интересы человека* :sunglasses:
+---
 
-----
+## Функциональность :rocket:
 
-## *Цель* :rocket:
-Разработать веб-платформу для анализа социальной сети ВК :speech_balloon:
+- Авторизация через email/пароль и через VK OAuth.
+- Анализ профиля по VK ID: сбор данных из VK API и генерация краткого описания с помощью GigaChat.
+- Сохранение профиля и результата анализа в БД, возможность повторного чтения без повторных запросов к VK.
+- Кэширование ответов VK через Redis и сохранение «снапшотов» профиля в Minio.
+- Метрики Prometheus (`/metrics`) и трассировки OpenTelemetry.
+- gRPC‑сервер со стандартным health‑чеком (порт `9090`) для интеграции с оркестраторами.
 
-## *Задачи* :clipboard:
-+ Создать проект с продуманной базой данных.
-+ Разработать функционал регистрации и аутентификации пользователей с возможностью авторизации через ВК.
-+ Внедрить получения данных о человеке с помощью VK API.
-+ Внедрить GigaChat для получения общей картины человека.
+## Архитектура и стек :computer:
 
-## *Задумка проекта* :sound:
-Задумка нашей команды – создать веб-платформу, которая помогает вам узнать, что действительно интересует ваших друзей и знакомых в социальных сетях. Эта платформа позволяет легко импортировать данные из любимой социальной сети Вконтакте и узнавать что-то новое о ваших друзьях или людей, которыми вы интересуетесь.
+**Backend**
 
-Наш инструмент создан для того, чтобы вы могли лучше понять и поддерживать связь с окружающими вас людьми.
+- Go
+- `github.com/gin-gonic/gin` — HTTP API.
+- GORM (Postgres / SQLite) — хранение пользователей и профилей.
+- VK API — данные пользователя: стена, друзья, подарки.
+- GigaChat — генерация текстового резюме профиля на основе собранных данных.
+- Redis — кэширование запросов к VK.
+- Minio (S3‑совместимое хранилище) — сохранение сырых JSON‑снапшотов профиля.
+- JWT‑аутентификация, VK OAuth, Prometheus‑метрики, OpenTelemetry‑трейсинг.
+- Отдельный gRPC‑health‑сервер для проверки живости сервиса.
 
-Мы стремимся сделать ваше общение еще более осмысленным и увлекательным, предоставляя вам возможность видеть, что волнует ваших друзей и знакомых, и находить новые темы для разговоров. :busts_in_silhouette:
+**Frontend**
 
-## *Перспективы нашего проекта* :eyes:
-### В ближайшем будущем
-+ Добавим возможность изменения персональных данных.
-+ Внедрим историю запросов.
-+ Добавим красочные графики и диаграммы, которые будут отображать различную информацию о человеке.
+- Простой SPA на «голом» HTML/CSS/JS (`internal/frontend`), отдаётся статикой по пути `/static`.
+- Форма, куда можно ввести VK ID и отправить запрос на анализ профиля.
 
-## *Использованные технологии* :computer:
-**backend**
+## Основные эндпоинты HTTP API :clipboard:
 
-![](url-to-image)
-<img src="https://raw.githubusercontent.com/gilbarbara/logos/52addcaa18dfecb4df77f3ee0753dca6b98187ad/logos/python.svg" alt="" width="80" height="80"> ![](url-to-image)
-<img src="https://raw.githubusercontent.com/gilbarbara/logos/52addcaa18dfecb4df77f3ee0753dca6b98187ad/logos/fastapi-icon.svg" alt="" width="80" height="80">
+- `GET /healthz` — health‑check сервиса.
 
-![](url-to-image)
-<img src="https://raw.githubusercontent.com/gilbarbara/logos/52addcaa18dfecb4df77f3ee0753dca6b98187ad/logos/sqlite.svg" alt="" width="170" height="170">
+**Авторизация**
 
-**frontend**
+- `POST /auth/login` — логин по email/паролю, возвращает `access_token` и `refresh_token` (и, опционально, устанавливает их в куки).
+- `GET /auth/vk/login` — редирект на VK OAuth.
+- `GET /auth/vk/callback` — callback от VK; создаёт пользователя (если его ещё нет) и возвращает пару JWT‑токенов.
 
-![](url-to-image)
-<img src="https://raw.githubusercontent.com/gilbarbara/logos/52addcaa18dfecb4df77f3ee0753dca6b98187ad/logos/html-5.svg" alt="" width="80" height="80">
-![](url-to-image)
-<img src="https://raw.githubusercontent.com/gilbarbara/logos/52addcaa18dfecb4df77f3ee0753dca6b98187ad/logos/css-3.svg" alt="" width="80" height="80">
-![](url-to-image)
-<img src="https://raw.githubusercontent.com/gilbarbara/logos/52addcaa18dfecb4df77f3ee0753dca6b98187ad/logos/javascript.svg" alt="" width="80" height="80">
+**Защищённые эндпоинты** (требуется JWT, мидлварь `auth.JWTMiddleware`):
 
+- `GET /me` — информация о текущем пользователе.
+- `GET /profiles/{vk_id}` — получить сохранённый профиль.
+- `POST /profiles/{vk_id}/analyze` — инициировать анализ профиля VK и сохранить/обновить результат.
 
-## *Ссылки*
+**Метрики**
 
-+ [Miro](https://miro.com/app/board/uXjVKUmJbj0=/) - **Архитектура проекта**
-+ [Notion](https://www.notion.so/909891a09efc4c82a277b459c01a66e4?v=ae7e63d60e2e45b6a3b788d95c2b0ef4) - **Ход проекта**
+- `GET /metrics` — Prometheus‑метрики (если включены в конфиге).
+
+## Конфигурация
+
+Конфиг загружается через Viper из файла `config.yaml` (если указан флаг `-config`) и/или из переменных окружения с префиксом `INTEAM_`. Основные параметры:
+
+- `INTEAM_DB_DRIVER` — драйвер БД: `postgres` или `sqlite`.
+- `INTEAM_DB_DSN` — DSN для подключения (например, `host=db user=postgres password=postgres dbname=inteam sslmode=disable` или путь к файлу SQLite).
+- `INTEAM_VK_BASE_URL` — базовый URL VK API (например, `https://api.vk.com/method`).
+- `INTEAM_VK_API_VERSION` — версия API VK (например, `5.199`).
+- `INTEAM_VK_ACCESS_TOKEN` — сервисный access‑token VK.
+- `INTEAM_GIGACHAT_BASE_URL` — URL GigaChat.
+- `INTEAM_GIGACHAT_TOKEN` — токен доступа к GigaChat.
+- `INTEAM_REDIS_ADDR` — адрес Redis (опционально, если не нужен кэш — можно не задавать).
+- `INTEAM_MINIO_ENDPOINT`, `INTEAM_MINIO_ACCESS_KEY_ID`, `INTEAM_MINIO_SECRET_ACCESS_KEY`, `INTEAM_MINIO_BUCKET` — настройки Minio (если не заданы — объектное хранилище отключено).
+- `INTEAM_AUTH_JWT_SECRET` — секрет для подписи JWT.
+- `INTEAM_AUTH_VK_CLIENT_ID`, `INTEAM_AUTH_VK_CLIENT_SECRET`, `INTEAM_AUTH_VK_REDIRECT_URL` — параметры VK OAuth.
+- `INTEAM_HTTP_HOST`, `INTEAM_HTTP_PORT` — адрес и порт HTTP‑сервера (по умолчанию `0.0.0.0:8080`).
+- `INTEAM_TELEMETRY_ENABLED`, `INTEAM_TELEMETRY_OTLP_ENDPOINT` — включение и настройки OTEL‑экспортера.
+
+Часть параметров имеет значения по умолчанию (таймауты, включение метрик и т.п.), но драйвер БД, DSN и секркты нужно задать явно.
+
+## Запуск локально
+
+### Вариант 1 — Docker Compose (полный стек)
+
+```bash
+docker-compose up --build
+```
+
+Это поднимет:
+
+- `api` — Go‑бэкенд на `8080`,
+- Postgres,
+- Redis,
+- Minio,
+- Prometheus и Grafana.
+
+После запуска API будет доступен на `http://localhost:8080`, метрики — на `/metrics`. Minio доступен на `http://localhost:9000`, консоль — на `http://localhost:9001` (логин/пароль по умолчанию `minioadmin/minioadmin`).
+
+### Вариант 2 — напрямую через Go
+
+```bash
+export INTEAM_DB_DRIVER=sqlite
+export INTEAM_DB_DSN=./inteam.db
+export INTEAM_VK_BASE_URL=https://api.vk.com/method
+export INTEAM_VK_API_VERSION=5.199
+export INTEAM_VK_ACCESS_TOKEN=<vk_token>
+export INTEAM_GIGACHAT_BASE_URL=<gigachat_url>
+export INTEAM_GIGACHAT_TOKEN=<gigachat_token>
+export INTEAM_AUTH_JWT_SECRET=<jwt_secret>
+
+go run ./cmd/server
+```
+
+При первом старте GORM выполнит `AutoMigrate` для таблиц пользователей и профилей. Миграции в каталоге `migrations` можно использовать отдельно, если нужен контроль над схемой БД.
+
+## Запуск gRPC‑health‑сервера
+
+Для интеграции с Kubernetes/Consul и т.п. есть отдельный бинарь, который поднимает gRPC‑сервер со стандартным health‑сервисом:
+
+```bash
+go run ./cmd/grpcserver
+```
+
+Сервер слушает порт `9090` и всегда возвращает статус `SERVING` (можно расширить при необходимости).
